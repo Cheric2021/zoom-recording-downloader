@@ -94,24 +94,6 @@ def format_filename(recording, file_type, recording_type):
     return '{} - {} UTC - {}.{}'.format(
         meeting_time.strftime('%Y.%m.%d'), meeting_time.strftime('%I.%M %p'), topic+" - "+rec_type, file_type.lower())
 
-
-def get_downloads(recording):
-    downloads = []
-    for download in recording['recording_files']:
-        file_type = download['file_type']
-        if file_type == "":
-            recording_type = 'incomplete'
-            #print("\download is: {}".format(download))
-        elif file_type != "TIMELINE":
-            recording_type = download['recording_type']
-        else:
-            recording_type = download['file_type']
-        # must append JWT token to download_url
-        download_url = download['download_url'] + "?access_token=" + api_token
-        downloads.append((file_type, download_url, recording_type))
-    return downloads
-
-
 def get_recordings(email, page_size, rec_start_date, rec_end_date):
     return {
         'userId':       email,
@@ -139,33 +121,6 @@ def list_recordings(email):
         recordings_data = response.json()
         recordings.extend(recordings_data['meetings'])
     return recordings
-
-
-def download_recording(download_url, email, filename):
-    dl_dir = os.sep.join([DOWNLOAD_DIRECTORY, email])
-    full_filename = os.sep.join([dl_dir, filename])
-    os.makedirs(dl_dir, exist_ok=True)
-    response = requests.get(download_url, stream=True)
-
-    # total size in bytes.
-    total_size = int(response.headers.get('content-length', 0))
-    block_size = 32 * 1024  # 32 Kibibytes
-
-    # create TQDM progress bar
-    t = tqdm(total=total_size, unit='iB', unit_scale=True)
-    try:
-        with open(full_filename, 'wb') as fd:
-            # with open(os.devnull, 'wb') as fd:  # write to dev/null when testing
-            for chunk in response.iter_content(block_size):
-                t.update(len(chunk))
-                fd.write(chunk)  # write video chunk to disk
-        t.close()
-        return True
-    except Exception as e:
-        # if there was some exception, print the error and return False
-        print(e)
-        return False
-
 
 def load_completed_meeting_ids():
     try:
@@ -213,21 +168,6 @@ def main():
             if meeting_id in COMPLETED_MEETING_IDS:
                 print("==> Skipping already downloaded meeting: {}".format(meeting_id))
                 continue
-
-            downloads = get_downloads(recording)
-            for file_type, download_url, recording_type in downloads:
-                if recording_type != 'incomplete':
-                    filename = format_filename(
-                        recording, file_type, recording_type)
-                    # truncate URL to 64 characters
-                    truncated_url = download_url[0:64] + "..."
-                    print("==> Downloading ({} of {}) as {}: {}: {}".format(
-                        index+1, total_count, recording_type, meeting_id, truncated_url))
-                    success |= download_recording(download_url, email, filename)
-                    #success = True
-                else:
-                    print("### Incomplete Recording ({} of {}) for {}".format(index+1, total_count, meeting_id))
-                    success = False         
 
             if success:
                 # if successful, write the ID of this recording to the completed file
